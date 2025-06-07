@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PulseMate</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; text-align: center; background: #000; color: #fff; }
+    #bpm { font-size: 48px; margin: 20px 0; }
+    video, canvas { display: none; }
+    button { padding: 10px 20px; font-size: 18px; }
+    #chart-container { width: 100%; max-width: 600px; margin: auto; }
+  </style>
+</head>
+<body>
+  <h1>PulseMate</h1>
+  <p>Place your finger on the rear camera</p>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="bpm">❤️ -- BPM</div>
+  <button onclick="startMonitor()">Start Monitoring</button>
+  <div id="chart-container">
+    <canvas id="pulseChart"></canvas>
+  </div>
+
+  <script>
+    let bpmDisplay = document.getElementById("bpm");
+    let video = document.getElementById("video");
+    let canvas = document.getElementById("canvas");
+    let ctx = canvas.getContext("2d");
+    let redData = [];
+    let timestamps = [];
+    let bpmHistory = [];
+
+    const chartCtx = document.getElementById('pulseChart').getContext('2d');
+    const pulseChart = new Chart(chartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Heart Rate (BPM)',
+          data: [],
+          borderColor: 'red',
+          backgroundColor: 'rgba(255,0,0,0.2)',
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+
+    async function startMonitor() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+
+      canvas.width = 100;
+      canvas.height = 100;
+
+      const interval = setInterval(() => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let total = 0;
+        for (let i = 0; i < frame.data.length; i += 4) {
+          total += frame.data[i];
+        }
+        let avg = total / (frame.data.length / 4);
+        redData.push(avg);
+        timestamps.push(Date.now());
+
+        if (redData.length > 100) {
+          redData.shift();
+          timestamps.shift();
+          detectBeats();
+        }
+      }, 100);
+    }
+
+    function detectBeats() {
+      let count = 0;
+      for (let i = 1; i < redData.length - 1; i++) {
+        if (redData[i] > redData[i - 1] && redData[i] > redData[i + 1]) count++;
+      }
+      let durationSec = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
+      let bpm = Math.round((count / durationSec) * 60);
+
+      if (bpm > 40 && bpm < 180) {
+        bpmDisplay.innerText = `❤️ ${bpm} BPM`;
+        saveToHistory(bpm);
+        updateChart(bpm);
+        checkEmergency(bpm);
+      }
+    }
+
+    function saveToHistory(bpm) {
+      let now = new Date().toLocaleTimeString();
+      bpmHistory.push({ time: now, bpm });
+      localStorage.setItem('bpmData', JSON.stringify(bpmHistory));
+    }
+
+    function updateChart(bpm) {
+      let now = new Date().toLocaleTimeString();
+      pulseChart.data.labels.push(now);
+      pulseChart.data.datasets[0].data.push(bpm);
+      if (pulseChart.data.labels.length > 20) {
+        pulseChart.data.labels.shift();
+        pulseChart.data.datasets[0].data.shift();
+      }
+      pulseChart.update();
+    }
+
+    function checkEmergency(bpm) {
+      if (bpm < 50 || bpm > 130) {
+        alert("Emergency: Abnormal Heart Rate Detected!");
+      }
+    }
+
+    // Load old data
+    window.onload = () => {
+      let saved = JSON.parse(localStorage.getItem('bpmData')) || [];
+      saved.forEach(entry => {
+        bpmHistory.push(entry);
+        pulseChart.data.labels.push(entry.time);
+        pulseChart.data.datasets[0].data.push(entry.bpm);
+      });
+      pulseChart.update();
+    }
+  </script>
+</body>
+</html>
