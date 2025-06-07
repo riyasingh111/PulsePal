@@ -1,4 +1,4 @@
-# PulsePal
+# PulseMate
 # ❤️
 
 **A Real-Time Heart Rate Monitor using Your Smartphone Camera**
